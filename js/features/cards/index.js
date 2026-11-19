@@ -1,28 +1,56 @@
 /* Fungsi: Mengelola papan kartu PECS, mode edit, mode gambar saja, dan pencarian ARASAAC.
-   Batasan: Menggunakan penyimpanan localStorage pada Tahap 1 dan tidak mengimpor fitur lain. */
+   Batasan: Menggunakan storageService untuk penyimpanan data dan gambar; tidak mengimpor fitur lain. */
 
-import { STORAGE_KEYS } from '../../config.js';
 import { basePecsDatabase } from '../../data/defaultCards.js';
 import { idToEnDict } from '../../data/arasaacDict.js';
-import { safeGetStorage, setJsonStorage } from '../../storage/localStore.js';
+import {
+    loadUserSettings,
+    saveUserSettings,
+    loadImageOnlySetting,
+    saveImageOnlySetting,
+    loadCollapsedCategories,
+    saveCollapsedCategories,
+    loadCustomLabels,
+    saveCustomLabels,
+    loadDeletedCardIds,
+    saveDeletedCardIds,
+    loadUserCards,
+    saveUserCards,
+    loadAllCardImages,
+    saveCardImage,
+    removeCardImage
+} from '../../storage/storageService.js';
 import { escapeHtml, compressImage, urlToBase64 } from '../../shared/helpers.js';
 
 let isEditMode = false;
-let isImageOnly = safeGetStorage(STORAGE_KEYS.IMG_ONLY, false);
+let isImageOnly = loadImageOnlySetting();
 let selectedArasaacUrl = null;
 let editingCardId = null;
 
-let userSettings = safeGetStorage(STORAGE_KEYS.SETTINGS, { level: 1, gender: 'L' });
-let customImages = safeGetStorage(STORAGE_KEYS.CUSTOM_IMAGES, {});
-let customLabels = safeGetStorage(STORAGE_KEYS.CUSTOM_LABELS, {});
-let userCards = safeGetStorage(STORAGE_KEYS.USER_CARDS, []);
-let deletedCardIds = safeGetStorage(STORAGE_KEYS.DELETED_CARDS, []);
-let collapsedCategories = safeGetStorage(STORAGE_KEYS.COLLAPSED_CATS, {});
+let userSettings = loadUserSettings();
+let customImages = {};
+let customLabels = loadCustomLabels();
+let userCards = loadUserCards();
+let deletedCardIds = loadDeletedCardIds();
+let collapsedCategories = loadCollapsedCategories();
 
 let onCardSelectCallback = null;
 
 export function setCardSelectHandler(handler) {
     onCardSelectCallback = typeof handler === 'function' ? handler : null;
+}
+
+export async function refreshCardsStorageState() {
+    userSettings = loadUserSettings();
+    isImageOnly = loadImageOnlySetting();
+    customLabels = loadCustomLabels();
+    userCards = loadUserCards();
+    deletedCardIds = loadDeletedCardIds();
+    collapsedCategories = loadCollapsedCategories();
+    customImages = await loadAllCardImages();
+    updateImageOnlyState();
+    syncAssessmentForm();
+    renderCategories();
 }
 
 export function getUserSettings() {
@@ -31,7 +59,7 @@ export function getUserSettings() {
 
 export function saveAssessmentSettings(level, gender) {
     userSettings = { level, gender };
-    setJsonStorage(STORAGE_KEYS.SETTINGS, userSettings);
+    saveUserSettings(userSettings);
     renderCategories();
 }
 
@@ -71,7 +99,7 @@ export function toggleEditMode(forceState) {
 
 export function toggleImageOnlyModeFromMenu() {
     isImageOnly = !isImageOnly;
-    setJsonStorage(STORAGE_KEYS.IMG_ONLY, isImageOnly);
+    saveImageOnlySetting(isImageOnly);
     updateImageOnlyState();
 }
 
@@ -94,7 +122,7 @@ export function updateImageOnlyState() {
 
 export function toggleCategoryCollapse(catKey) {
     collapsedCategories[catKey] = !collapsedCategories[catKey];
-    setJsonStorage(STORAGE_KEYS.COLLAPSED_CATS, collapsedCategories);
+    saveCollapsedCategories(collapsedCategories);
     renderCategories();
 }
 
@@ -103,7 +131,7 @@ export function renderCategories() {
     if (!container) return;
     container.innerHTML = '';
 
-    let activeDatabase = JSON.parse(JSON.stringify(basePecsDatabase));
+    const activeDatabase = JSON.parse(JSON.stringify(basePecsDatabase));
 
     if (Array.isArray(userCards)) {
         userCards.forEach((uCard) => {
@@ -115,7 +143,7 @@ export function renderCategories() {
                     emoji: '🖼️',
                     isUserCreated: true
                 });
-                if (uCard.imageUrl) {
+                if (uCard.imageUrl && !customImages[uCard.id]) {
                     customImages[uCard.id] = uCard.imageUrl;
                 }
             }
@@ -198,23 +226,23 @@ export function triggerCardFlash(elementId) {
     }
 }
 
-export function deleteCard(itemId, event) {
+export async function deleteCard(itemId, event) {
     if (event) event.stopPropagation();
     const confirmDelete = confirm('Apakah Anda yakin ingin menghapus kartu ini?');
     if (!confirmDelete) return;
 
     if (Array.isArray(userCards) && userCards.some((uc) => uc.id === itemId)) {
         userCards = userCards.filter((c) => c.id !== itemId);
-        setJsonStorage(STORAGE_KEYS.USER_CARDS, userCards);
+        saveUserCards(userCards);
     } else if (!deletedCardIds.includes(itemId)) {
         deletedCardIds.push(itemId);
-        setJsonStorage(STORAGE_KEYS.DELETED_CARDS, deletedCardIds);
+        saveDeletedCardIds(deletedCardIds);
     }
 
     delete customImages[itemId];
     delete customLabels[itemId];
-    setJsonStorage(STORAGE_KEYS.CUSTOM_IMAGES, customImages);
-    setJsonStorage(STORAGE_KEYS.CUSTOM_LABELS, customLabels);
+    await removeCardImage(itemId);
+    saveCustomLabels(customLabels);
 
     renderCategories();
 }
@@ -307,6 +335,13 @@ export async function searchArasaac() {
     }
 }
 
+async function applyEditedCardImage(cardId, base64Img) {
+    customImages[cardId] = base64Img;
+    await saveCardImage(cardId, base64Img);
+    closeAddCardModal();
+    renderCategories();
+}
+
 export async function submitNewCustomCard() {
     const catKey = document.getElementById('new-card-category').value;
     const textVal = document.getElementById('new-card-text').value.trim();
@@ -316,20 +351,14 @@ export async function submitNewCustomCard() {
         if (selectedArasaacUrl) {
             try {
                 const base64Img = await urlToBase64(selectedArasaacUrl);
-                customImages[editingCardId] = base64Img;
-                setJsonStorage(STORAGE_KEYS.CUSTOM_IMAGES, customImages);
-                closeAddCardModal();
-                renderCategories();
+                await applyEditedCardImage(editingCardId, base64Img);
                 return;
             } catch (e) {
                 console.error('Gagal mengonversi gambar:', e);
             }
         } else if (fileInput.files && fileInput.files.length > 0) {
-            compressImage(fileInput.files[0], (compressedBase64) => {
-                customImages[editingCardId] = compressedBase64;
-                setJsonStorage(STORAGE_KEYS.CUSTOM_IMAGES, customImages);
-                closeAddCardModal();
-                renderCategories();
+            compressImage(fileInput.files[0], async (compressedBase64) => {
+                await applyEditedCardImage(editingCardId, compressedBase64);
             });
             return;
         } else {
@@ -346,7 +375,7 @@ export async function submitNewCustomCard() {
     if (selectedArasaacUrl) {
         try {
             const base64Img = await urlToBase64(selectedArasaacUrl);
-            saveCardToStorage(catKey, textVal, base64Img);
+            await saveCardToStorage(catKey, textVal, base64Img);
             return;
         } catch (e) {
             console.error('Gagal mengonversi gambar ARASAAC:', e);
@@ -358,24 +387,30 @@ export async function submitNewCustomCard() {
         return;
     }
 
-    compressImage(fileInput.files[0], (compressedBase64) => {
-        saveCardToStorage(catKey, textVal, compressedBase64);
+    compressImage(fileInput.files[0], async (compressedBase64) => {
+        await saveCardToStorage(catKey, textVal, compressedBase64);
     });
 }
 
-function saveCardToStorage(catKey, textVal, imageUrl) {
+async function saveCardToStorage(catKey, textVal, imageUrl) {
     const newCardId = 'custom_card_' + Date.now();
     const newCardObj = {
         id: newCardId,
         catKey,
-        word: textVal,
-        imageUrl
+        word: textVal
     };
 
+    const imgSaveResult = await saveCardImage(newCardId, imageUrl);
+    if (!imgSaveResult.ok) {
+        alert('Memori penyimpanan penuh. Coba hapus beberapa kartu lama.');
+        return;
+    }
+
+    customImages[newCardId] = imageUrl;
     userCards.push(newCardObj);
-    try {
-        setJsonStorage(STORAGE_KEYS.USER_CARDS, userCards);
-    } catch (err) {
+
+    const cardSaveResult = saveUserCards(userCards);
+    if (!cardSaveResult.ok) {
         alert('Memori penyimpanan penuh. Coba hapus beberapa kartu lama.');
         return;
     }
@@ -390,16 +425,16 @@ export function editCardText(itemId, currentText, event) {
     const newText = prompt('Masukkan tulisan/nama baru untuk kartu ini:', currentText);
     if (newText !== null && newText.trim() !== '') {
         customLabels[itemId] = newText.trim();
-        setJsonStorage(STORAGE_KEYS.CUSTOM_LABELS, customLabels);
+        saveCustomLabels(customLabels);
         renderCategories();
     }
 }
 
-export function resetCardCustomization(itemId, event) {
+export async function resetCardCustomization(itemId, event) {
     if (event) event.stopPropagation();
     delete customImages[itemId];
     delete customLabels[itemId];
-    setJsonStorage(STORAGE_KEYS.CUSTOM_IMAGES, customImages);
-    setJsonStorage(STORAGE_KEYS.CUSTOM_LABELS, customLabels);
+    await removeCardImage(itemId);
+    saveCustomLabels(customLabels);
     renderCategories();
 }
