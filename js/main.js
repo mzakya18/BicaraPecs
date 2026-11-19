@@ -1,8 +1,9 @@
-/* Fungsi: Pintu masuk utama aplikasi Bicara PECS yang menyatukan seluruh modul dan inisialisasi.
+/* Fungsi: Pintu masuk utama aplikasi Bicara PECS yang menjalankan migrasi dan menghubungkan modul.
    Batasan: Tidak menyimpan logika fitur detail; hanya menghubungkan modul dan mendaftarkan event. */
 
 import { STORAGE_KEYS } from './config.js';
 import { getRawStorage, setRawStorage, clearAllStorage } from './storage/localStore.js';
+import { migrateLegacyImagesToIdb, clearAllCardImages } from './storage/storageService.js';
 import {
     bindActivityLockListeners,
     evaluateAppLock,
@@ -34,12 +35,10 @@ import {
 } from './features/sentence/index.js';
 import {
     saveAssessmentSettings,
-    syncAssessmentForm,
+    refreshCardsStorageState,
     toggleEditMode,
     toggleImageOnlyModeFromMenu,
-    updateImageOnlyState,
     toggleCategoryCollapse,
-    renderCategories,
     deleteCard,
     openAddCardModal,
     openChangeImageModal,
@@ -115,9 +114,10 @@ export function saveSettingsAndStart() {
     goToPage('page-main');
 }
 
-export function resetToDefaultSettings() {
+export async function resetToDefaultSettings() {
     const confirmReset = confirm('Apakah Anda yakin ingin menghapus semua kustomisasi dan mengembalikan ke pengaturan awal?');
     if (confirmReset) {
+        await clearAllCardImages();
         clearAllStorage();
         alert('Aplikasi telah dikembalikan ke pengaturan awal.');
         window.location.reload();
@@ -172,11 +172,10 @@ function wireModuleConnections() {
 async function initializeApp() {
     initTheme();
     await evaluateAppLock();
+    await migrateLegacyImagesToIdb();
 
-    updateImageOnlyState();
     updateChildLockUI(() => toggleEditMode(false));
-    syncAssessmentForm();
-    renderCategories();
+    await refreshCardsStorageState();
     updateSentenceStrip();
 
     const lastActivePage = getRawStorage(STORAGE_KEYS.ACTIVE_PAGE) || 'page-welcome';
