@@ -27,6 +27,7 @@ import {
 } from './lock/childLock.js';
 import {
     initRegisteredFeatures,
+    runMonthlyBackupReminderCheck,
     refreshRegisteredFeatureStates,
     registerFeatureWindowActions
 } from './features/registry.js';
@@ -147,7 +148,12 @@ function wireCoreConnections() {
         }
     };
 
-    featureActionsRef = registerFeatureWindowActions(forceExitEdit);
+    const handleAfterDataRestored = async () => {
+        updateChildLockUI(forceExitEdit);
+        await refreshRegisteredFeatureStates();
+    };
+
+    featureActionsRef = registerFeatureWindowActions(forceExitEdit, handleAfterDataRestored);
 
     window.scrollToTop = scrollToTop;
     window.goToPage = goToPage;
@@ -179,6 +185,7 @@ async function initializeApp() {
 
     updateChildLockUI(forceExitEdit);
     await refreshRegisteredFeatureStates();
+    runMonthlyBackupReminderCheck();
 
     const lastActivePage = getRawStorage(STORAGE_KEYS.ACTIVE_PAGE) || 'page-welcome';
     goToPage(lastActivePage);
