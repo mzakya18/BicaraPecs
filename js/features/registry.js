@@ -34,16 +34,28 @@ import {
     resetCardCustomization,
     setCardSelectHandler
 } from './cards/index.js';
+import {
+    setAfterRestoreHandler,
+    checkAndNotifyMonthlyBackup,
+    exportBackupJsonFile,
+    restoreBackupFromText,
+    triggerBackupFilePicker
+} from './backup/index.js';
 
 export const REGISTERED_FEATURES = [
     { name: 'theme', label: 'Tema Tampilan' },
     { name: 'history', label: 'Riwayat Kata' },
     { name: 'sentence', label: 'Penyusunan Kalimat' },
-    { name: 'cards', label: 'Papan Kartu PECS' }
+    { name: 'cards', label: 'Papan Kartu PECS' },
+    { name: 'backup', label: 'Cadangan JSON & Pengingat Bulanan' }
 ];
 
 export function initRegisteredFeatures() {
     initTheme();
+}
+
+export function runMonthlyBackupReminderCheck() {
+    checkAndNotifyMonthlyBackup();
 }
 
 export async function refreshRegisteredFeatureStates() {
@@ -51,13 +63,23 @@ export async function refreshRegisteredFeatureStates() {
     updateSentenceStrip();
 }
 
-export function registerFeatureWindowActions(onForceExitEditMode) {
+export function registerFeatureWindowActions(onForceExitEditMode, onAfterDataRestored) {
     setCardSelectHandler((word, emoji, customImgUrl) => {
         addToSentence(word, emoji, customImgUrl);
     });
 
     setSentenceWordAddedHandler((word) => {
         saveToHistory(word);
+    });
+
+    setAfterRestoreHandler(async () => {
+        initTheme();
+        if (typeof onAfterDataRestored === 'function') {
+            await onAfterDataRestored();
+        }
+        if (typeof window.renderHistory === 'function') {
+            window.renderHistory();
+        }
     });
 
     window.changeTheme = changeTheme;
@@ -79,6 +101,10 @@ export function registerFeatureWindowActions(onForceExitEditMode) {
     window.submitNewCustomCard = submitNewCustomCard;
     window.editCardText = editCardText;
     window.resetCardCustomization = resetCardCustomization;
+
+    window.exportBackupJsonFile = exportBackupJsonFile;
+    window.restoreBackupFromText = restoreBackupFromText;
+    window.triggerBackupFilePicker = triggerBackupFilePicker;
 
     return {
         saveAssessmentSettings,
