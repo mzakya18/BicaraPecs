@@ -26,12 +26,12 @@
                 Masukkan sandi default awal untuk membuka aplikasi.
             </p>
 
-            <form onsubmit="event.preventDefault(); checkUnlockPassword();">
+            <form id="lock-screen-form">
                 <input type="password" id="lock-input-pass" class="lock-input" placeholder="Masukkan Sandi / PIN" autocomplete="off">
                 <div id="lock-error-msg" style="color: #ef4444; font-size: 0.85rem; display: none; margin-bottom: 10px; font-weight: bold;">
                     Sandi atau PIN salah, silakan coba lagi.
                 </div>
-                <button type="button" class="btn-primary" onclick="checkUnlockPassword()">Buka Aplikasi</button>
+                <button type="button" id="btn-unlock-app" class="btn-primary">Buka Aplikasi</button>
             </form>
         </div>
     </div>
@@ -271,6 +271,37 @@
         <div id="categories-container"></div>
     </div>
 
+    <script>
+        (function bindImmediateLockFallback() {
+            const form = document.getElementById('lock-screen-form');
+            const btn = document.getElementById('btn-unlock-app');
+
+            function triggerUnlock() {
+                if (typeof window.checkUnlockPassword === 'function') {
+                    window.checkUnlockPassword();
+                } else {
+                    const err = document.getElementById('lock-error-msg');
+                    if (err) {
+                        err.innerText = 'Modul aplikasi belum siap. Pastikan dibuka lewat http/https dan periksa konsol peramban.';
+                        err.style.display = 'block';
+                    }
+                }
+            }
+
+            if (form) {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    triggerUnlock();
+                });
+            }
+            if (btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    triggerUnlock();
+                });
+            }
+        })();
+    </script>
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
