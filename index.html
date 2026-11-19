@@ -1,4 +1,4 @@
-<!-- Fungsi: Kerangka halaman utama PWA Bicara PECS yang memuat gaya CSS dan modul JavaScript.
+<!-- Fungsi: Kerangka halaman utama PWA Bicara PECS dengan pesan privasi ramah dan pengaman navigasi.
      Batasan: Memuat modul ES sehingga perlu dijalankan melalui protokol http atau https. -->
 <!DOCTYPE html>
 <html lang="id">
@@ -192,11 +192,11 @@
             </div>
 
             <div class="disclaimer">
-                <strong>🛡️ 100% Aman, Offline & Cepat</strong><br>
-                Webapp ini bisa diinstal ke HP Anda. Semua data aman di perangkat.
+                <strong>🛡️ Data Tersimpan di HP Anda</strong><br>
+                Webapp ini tidak mengirimkan data ke server luar. Semua pengaturan, kartu, dan foto tersimpan langsung di HP Anda serta bisa digunakan offline.
             </div>
 
-            <button class="btn-primary" onclick="goToPage('page-assessment')">Ayo Mulai</button>
+            <button type="button" id="btn-start-welcome" class="btn-primary">Ayo Mulai</button>
         </div>
     </div>
 
@@ -231,8 +231,8 @@
                 </select>
             </div>
 
-            <button class="btn-primary" onclick="saveSettingsAndStart()">Simpan & Buka Papan</button>
-            <button class="btn-secondary" onclick="goToPage('page-welcome')">Kembali</button>
+            <button type="button" id="btn-save-assessment" class="btn-primary">Simpan & Buka Papan</button>
+            <button type="button" class="btn-secondary" onclick="goToPage('page-welcome')">Kembali</button>
         </div>
     </div>
 
@@ -246,7 +246,7 @@
                 <li><strong>Pendekatan Neurodevelopmental.</strong></li>
                 <li><strong>Fitzgerald Key:</strong> Standar warna AAC internasional.</li>
             </ul>
-            <button class="btn-primary" onclick="goToPage('page-main')">Kembali ke Papan</button>
+            <button type="button" class="btn-primary" onclick="goToPage('page-main')">Kembali ke Papan</button>
         </div>
     </div>
 
@@ -272,10 +272,26 @@
     </div>
 
     <script>
-        (function bindImmediateLockFallback() {
-            const form = document.getElementById('lock-screen-form');
-            const btn = document.getElementById('btn-unlock-app');
+        (function bindImmediateActions() {
+            function directGoToPage(pageId) {
+                if (typeof window.goToPage === 'function') {
+                    window.goToPage(pageId);
+                    return;
+                }
+                const pages = document.querySelectorAll('.page');
+                pages.forEach((p) => p.classList.remove('active'));
+                const target = document.getElementById(pageId);
+                if (target) {
+                    target.classList.add('active');
+                    try {
+                        localStorage.setItem('pecs_active_page', pageId);
+                    } catch (e) {}
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            }
 
+            const form = document.getElementById('lock-screen-form');
+            const unlockBtn = document.getElementById('btn-unlock-app');
             function triggerUnlock() {
                 if (typeof window.checkUnlockPassword === 'function') {
                     window.checkUnlockPassword();
@@ -287,17 +303,43 @@
                     }
                 }
             }
-
             if (form) {
                 form.addEventListener('submit', function(e) {
                     e.preventDefault();
                     triggerUnlock();
                 });
             }
-            if (btn) {
-                btn.addEventListener('click', function(e) {
+            if (unlockBtn) {
+                unlockBtn.addEventListener('click', function(e) {
                     e.preventDefault();
                     triggerUnlock();
+                });
+            }
+
+            const startBtn = document.getElementById('btn-start-welcome');
+            if (startBtn) {
+                startBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    directGoToPage('page-assessment');
+                });
+            }
+
+            const saveAssessBtn = document.getElementById('btn-save-assessment');
+            if (saveAssessBtn) {
+                saveAssessBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (typeof window.saveSettingsAndStart === 'function') {
+                        window.saveSettingsAndStart();
+                    } else {
+                        const selectedRadio = document.querySelector('input[name="level"]:checked');
+                        const level = selectedRadio ? parseInt(selectedRadio.value, 10) : 1;
+                        const genderSelect = document.getElementById('select-gender');
+                        const gender = genderSelect ? genderSelect.value : 'L';
+                        try {
+                            localStorage.setItem('pecs_user_settings', JSON.stringify({ level, gender }));
+                        } catch (err) {}
+                        directGoToPage('page-main');
+                    }
                 });
             }
         })();
