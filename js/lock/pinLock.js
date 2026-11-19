@@ -52,7 +52,7 @@ export async function evaluateAppLock() {
     }
 
     if (lockType === 'pin') {
-        const timeoutMinutes = parseInt(getRawStorage(STORAGE_KEYS.LAST_ACTIVE) ? (localStorage.getItem('pecs_timeout_min') || '0') : '0', 10);
+        const timeoutMinutes = parseInt(localStorage.getItem('pecs_timeout_min') || '0', 10);
         const lastActive = parseInt(getRawStorage(STORAGE_KEYS.LAST_ACTIVE) || '0', 10);
         const now = Date.now();
 
@@ -80,7 +80,7 @@ export async function checkUnlockPassword() {
     const inputElem = document.getElementById('lock-input-pass');
     const inputVal = inputElem ? inputElem.value.trim() : '';
     const errorMsg = document.getElementById('lock-error-msg');
-    const storedHash = getRawStorage(STORAGE_KEYS.PASS_HASH);
+    let storedHash = getRawStorage(STORAGE_KEYS.PASS_HASH);
 
     if (!inputVal) {
         if (errorMsg) {
@@ -88,6 +88,11 @@ export async function checkUnlockPassword() {
             errorMsg.style.display = 'block';
         }
         return;
+    }
+
+    if (!storedHash) {
+        storedHash = await hashText(APP_CONFIG.DEFAULT_PASS_PLAIN);
+        setRawStorage(STORAGE_KEYS.PASS_HASH, storedHash);
     }
 
     const inputHash = await hashText(inputVal);
