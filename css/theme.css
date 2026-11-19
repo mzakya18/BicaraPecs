@@ -1,0 +1,28 @@
+/* Fungsi: Menyimpan variabel warna tema terang dan gelap.
+   Batasan: Hanya mengatur warna tema, bukan tata letak. */
+
+:root {
+    --bg-color: #f0f4f8;
+    --text-color: #333;
+    --card-bg: #fff;
+    --shadow: 0 4px 6px rgba(0,0,0,0.05);
+    --border-dashed: #cbd5e1;
+    --primary: #3b82f6;
+    --header-border: #f1f5f9;
+    --card-border: #e2e8f0;
+    --sidebar-bg: #fff;
+    --overlay-bg: rgba(0,0,0,0.5);
+}
+
+[data-theme="dark"] {
+    --bg-color: #0f172a;
+    --text-color: #f8fafc;
+    --card-bg: #1e293b;
+    --shadow: 0 4px 6px rgba(0,0,0,0.3);
+    --border-dashed: #475569;
+    --primary: #3b82f6;
+    --header-border: #334155;
+    --card-border: #334155;
+    --sidebar-bg: #1e293b;
+    --overlay-bg: rgba(255,255,255,0.1);
+}
