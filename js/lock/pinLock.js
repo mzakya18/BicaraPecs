@@ -4,12 +4,39 @@
 import { APP_CONFIG, STORAGE_KEYS } from '../config.js';
 import { getRawStorage, setRawStorage } from '../storage/localStore.js';
 
+function showLockMessage(text) {
+    const errorMsg = document.getElementById('lock-error-msg');
+    if (errorMsg) {
+        errorMsg.innerText = text;
+        errorMsg.style.display = 'block';
+    } else {
+        alert(text);
+    }
+}
+
+function hideLockMessage() {
+    const errorMsg = document.getElementById('lock-error-msg');
+    if (errorMsg) {
+        errorMsg.innerText = '';
+        errorMsg.style.display = 'none';
+    }
+}
+
 export async function hashText(text) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (window.crypto && window.crypto.subtle) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    let fallbackHash = 0;
+    for (let i = 0; i < text.length; i++) {
+        fallbackHash = ((fallbackHash << 5) - fallbackHash) + text.charCodeAt(i);
+        fallbackHash |= 0;
+    }
+    return `fb_${Math.abs(fallbackHash).toString(16)}`;
 }
 
 export function updateLastActiveTimestamp() {
@@ -79,38 +106,44 @@ export async function evaluateAppLock() {
 export async function checkUnlockPassword() {
     const inputElem = document.getElementById('lock-input-pass');
     const inputVal = inputElem ? inputElem.value.trim() : '';
-    const errorMsg = document.getElementById('lock-error-msg');
-    let storedHash = getRawStorage(STORAGE_KEYS.PASS_HASH);
+    const lockModal = document.getElementById('lock-screen-modal');
 
     if (!inputVal) {
-        if (errorMsg) {
-            errorMsg.innerText = 'Harap masukkan sandi atau PIN!';
-            errorMsg.style.display = 'block';
-        }
+        showLockMessage('Harap masukkan sandi atau PIN terlebih dahulu.');
         return;
     }
 
-    if (!storedHash) {
-        storedHash = await hashText(APP_CONFIG.DEFAULT_PASS_PLAIN);
-        setRawStorage(STORAGE_KEYS.PASS_HASH, storedHash);
-    }
-
-    const inputHash = await hashText(inputVal);
-
-    if (inputHash === storedHash) {
-        if (errorMsg) errorMsg.style.display = 'none';
-        if (inputElem) inputElem.value = '';
-        const lockModal = document.getElementById('lock-screen-modal');
-        if (lockModal) lockModal.style.display = 'none';
-        updateLastActiveTimestamp();
-
+    try {
         const lockType = getRawStorage(STORAGE_KEYS.LOCK_TYPE) || 'default';
-        if (lockType === 'default') {
-            openPinConfigModal(true);
+        const defaultPass = APP_CONFIG.DEFAULT_PASS_PLAIN;
+        const defaultHash = await hashText(defaultPass);
+
+        let storedHash = getRawStorage(STORAGE_KEYS.PASS_HASH);
+        if (!storedHash) {
+            storedHash = defaultHash;
+            setRawStorage(STORAGE_KEYS.PASS_HASH, storedHash);
         }
-    } else if (errorMsg) {
-        errorMsg.innerText = 'Sandi atau PIN salah, silakan coba lagi.';
-        errorMsg.style.display = 'block';
+
+        const inputHash = await hashText(inputVal);
+        const matchesStored = inputHash === storedHash;
+        const matchesDefault = lockType === 'default' && inputVal === defaultPass;
+
+        if (matchesStored || matchesDefault) {
+            setRawStorage(STORAGE_KEYS.PASS_HASH, defaultHash);
+            hideLockMessage();
+            if (inputElem) inputElem.value = '';
+            if (lockModal) lockModal.style.display = 'none';
+            updateLastActiveTimestamp();
+
+            if (lockType === 'default') {
+                openPinConfigModal(true);
+            }
+        } else {
+            showLockMessage('Sandi atau PIN belum sesuai. Silakan periksa kembali lalu coba lagi.');
+        }
+    } catch (err) {
+        console.error('Gagal memeriksa sandi:', err);
+        showLockMessage('Terjadi kendala saat memeriksa sandi. Silakan periksa konsol peramban.');
     }
 }
 
