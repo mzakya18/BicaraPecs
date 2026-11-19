@@ -1,5 +1,5 @@
-/* Fungsi: Pintu masuk utama aplikasi Bicara PECS dengan penanganan error global dan pemulihan cadangan.
-   Batasan: Tidak menyimpan logika fitur detail; hanya menghubungkan modul dan inisialisasi. */
+/* Fungsi: Pintu masuk utama aplikasi Bicara PECS yang memuat fitur melalui registry.js.
+   Batasan: Tidak menyimpan logika detail fitur; hanya mengatur alur utama dan inisialisasi. */
 
 import { STORAGE_KEYS } from './config.js';
 import { getRawStorage, setRawStorage, clearAllStorage } from './storage/localStore.js';
@@ -26,38 +26,12 @@ import {
     updateChildLockUI
 } from './lock/childLock.js';
 import {
-    changeTheme,
-    initTheme
-} from './features/theme/index.js';
-import {
-    saveToHistory,
-    renderHistory
-} from './features/history/index.js';
-import {
-    addToSentence,
-    updateSentenceStrip,
-    removeFromSentence,
-    clearSentence,
-    speakSentence,
-    setSentenceWordAddedHandler
-} from './features/sentence/index.js';
-import {
-    saveAssessmentSettings,
-    refreshCardsStorageState,
-    toggleEditMode,
-    toggleImageOnlyModeFromMenu,
-    toggleCategoryCollapse,
-    deleteCard,
-    openAddCardModal,
-    openChangeImageModal,
-    closeAddCardModal,
-    quickCategorySearch,
-    searchArasaac,
-    submitNewCustomCard,
-    editCardText,
-    resetCardCustomization,
-    setCardSelectHandler
-} from './features/cards/index.js';
+    initRegisteredFeatures,
+    refreshRegisteredFeatureStates,
+    registerFeatureWindowActions
+} from './features/registry.js';
+
+let featureActionsRef = null;
 
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
@@ -118,7 +92,9 @@ export function saveSettingsAndStart() {
     const genderSelect = document.getElementById('select-gender');
     const selectedGender = genderSelect ? genderSelect.value : 'L';
 
-    saveAssessmentSettings(selectedLevel, selectedGender);
+    if (featureActionsRef && typeof featureActionsRef.saveAssessmentSettings === 'function') {
+        featureActionsRef.saveAssessmentSettings(selectedLevel, selectedGender);
+    }
     goToPage('page-main');
 }
 
@@ -150,22 +126,28 @@ export async function restoreBackupJsonText(jsonText) {
         return { ok: false };
     }
 
-    initTheme();
-    updateChildLockUI(() => toggleEditMode(false));
-    await refreshCardsStorageState();
-    renderHistory();
+    initRegisteredFeatures();
+    updateChildLockUI(() => {
+        if (featureActionsRef && typeof featureActionsRef.forceExitEditMode === 'function') {
+            featureActionsRef.forceExitEditMode(false);
+        }
+    });
+    await refreshRegisteredFeatureStates();
+    if (typeof window.renderHistory === 'function') {
+        window.renderHistory();
+    }
     alert(result.message);
     return { ok: true };
 }
 
-function wireModuleConnections() {
-    setCardSelectHandler((word, emoji, customImgUrl) => {
-        addToSentence(word, emoji, customImgUrl);
-    });
+function wireCoreConnections() {
+    const forceExitEdit = () => {
+        if (typeof window.toggleEditMode === 'function') {
+            window.toggleEditMode(false);
+        }
+    };
 
-    setSentenceWordAddedHandler((word) => {
-        saveToHistory(word);
-    });
+    featureActionsRef = registerFeatureWindowActions(forceExitEdit);
 
     window.scrollToTop = scrollToTop;
     window.goToPage = goToPage;
@@ -181,37 +163,22 @@ function wireModuleConnections() {
     window.togglePinInputGroup = togglePinInputGroup;
     window.savePinConfiguration = savePinConfiguration;
 
-    window.handleLockClick = () => handleLockClick(() => toggleEditMode(false));
-
-    window.changeTheme = changeTheme;
-    window.renderHistory = renderHistory;
-
-    window.removeFromSentence = removeFromSentence;
-    window.clearSentence = clearSentence;
-    window.speakSentence = speakSentence;
-
-    window.toggleEditMode = () => toggleEditMode();
-    window.toggleImageOnlyModeFromMenu = toggleImageOnlyModeFromMenu;
-    window.toggleCategoryCollapse = toggleCategoryCollapse;
-    window.deleteCard = deleteCard;
-    window.openAddCardModal = openAddCardModal;
-    window.openChangeImageModal = openChangeImageModal;
-    window.closeAddCardModal = closeAddCardModal;
-    window.quickCategorySearch = quickCategorySearch;
-    window.searchArasaac = searchArasaac;
-    window.submitNewCustomCard = submitNewCustomCard;
-    window.editCardText = editCardText;
-    window.resetCardCustomization = resetCardCustomization;
+    window.handleLockClick = () => handleLockClick(forceExitEdit);
 }
 
 async function initializeApp() {
-    initTheme();
+    initRegisteredFeatures();
     await evaluateAppLock();
     await migrateLegacyImagesToIdb();
 
-    updateChildLockUI(() => toggleEditMode(false));
-    await refreshCardsStorageState();
-    updateSentenceStrip();
+    const forceExitEdit = () => {
+        if (typeof window.toggleEditMode === 'function') {
+            window.toggleEditMode(false);
+        }
+    };
+
+    updateChildLockUI(forceExitEdit);
+    await refreshRegisteredFeatureStates();
 
     const lastActivePage = getRawStorage(STORAGE_KEYS.ACTIVE_PAGE) || 'page-welcome';
     goToPage(lastActivePage);
@@ -221,7 +188,7 @@ installGlobalErrorHandlers();
 registerServiceWorker();
 bindActivityLockListeners();
 bindScrollTopButton();
-wireModuleConnections();
+wireCoreConnections();
 
 if (document.readyState === 'loading') {
     window.addEventListener('DOMContentLoaded', initializeApp);
