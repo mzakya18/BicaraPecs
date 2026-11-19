@@ -1,11 +1,37 @@
-/* Fungsi: Pintu masuk utama aplikasi Bicara PECS yang mengamankan pembukaan layar kunci
-   meskipun modul fitur lain belum tersedia atau sedang diperbarui.
+/* Fungsi: Pintu masuk utama aplikasi Bicara PECS yang mengamankan navigasi halaman
+   meskipun sebagian modul fitur sedang dimuat atau diperbarui.
    Batasan: Tidak menyimpan logika detail fitur; hanya mengatur alur utama dan inisialisasi. */
 
 const DEFAULT_FALLBACK_PASS = 'bicarapecsby@zakymza18';
 const PASS_HASH_KEY = 'pecs_pass_hash';
 const LOCK_TYPE_KEY = 'pecs_lock_type';
 const LAST_ACTIVE_KEY = 'pecs_last_active';
+const ACTIVE_PAGE_KEY = 'pecs_active_page';
+const SETTINGS_KEY = 'pecs_user_settings';
+
+function fallbackGoToPage(pageId) {
+    const pages = document.querySelectorAll('.page');
+    pages.forEach((page) => page.classList.remove('active'));
+    const targetPage = document.getElementById(pageId);
+    if (targetPage) {
+        targetPage.classList.add('active');
+        try {
+            localStorage.setItem(ACTIVE_PAGE_KEY, pageId);
+        } catch (e) {}
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
+function fallbackSaveSettingsAndStart() {
+    const selectedRadio = document.querySelector('input[name="level"]:checked');
+    const selectedLevel = selectedRadio ? parseInt(selectedRadio.value, 10) : 1;
+    const genderSelect = document.getElementById('select-gender');
+    const selectedGender = genderSelect ? genderSelect.value : 'L';
+    try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ level: selectedLevel, gender: selectedGender }));
+    } catch (e) {}
+    fallbackGoToPage('page-main');
+}
 
 async function fallbackHashText(text) {
     if (window.crypto && window.crypto.subtle) {
@@ -54,6 +80,8 @@ async function fallbackCheckUnlockPassword() {
     }
 }
 
+window.goToPage = fallbackGoToPage;
+window.saveSettingsAndStart = fallbackSaveSettingsAndStart;
 window.checkUnlockPassword = fallbackCheckUnlockPassword;
 
 async function bootstrapModules() {
