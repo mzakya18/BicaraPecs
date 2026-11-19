@@ -1,5 +1,5 @@
 /* Fungsi: Mengelola papan kartu PECS, mode edit, mode gambar saja, dan pencarian ARASAAC.
-   Batasan: Menggunakan storageService untuk penyimpanan data dan gambar; tidak mengimpor fitur lain. */
+   Batasan: Menggunakan storageService dan pesan ramah; tidak mengimpor fitur lain secara langsung. */
 
 import { basePecsDatabase } from '../../data/defaultCards.js';
 import { idToEnDict } from '../../data/arasaacDict.js';
@@ -21,6 +21,7 @@ import {
     removeCardImage
 } from '../../storage/storageService.js';
 import { escapeHtml, compressImage, urlToBase64 } from '../../shared/helpers.js';
+import { showFriendlyNotice } from '../../shared/errorHandler.js';
 
 let isEditMode = false;
 let isImageOnly = loadImageOnlySetting();
@@ -59,7 +60,10 @@ export function getUserSettings() {
 
 export function saveAssessmentSettings(level, gender) {
     userSettings = { level, gender };
-    saveUserSettings(userSettings);
+    const result = saveUserSettings(userSettings);
+    if (!result.ok) {
+        showFriendlyNotice(result.friendlyMessage, 'Penyimpanan Pengaturan');
+    }
     renderCategories();
 }
 
@@ -99,7 +103,10 @@ export function toggleEditMode(forceState) {
 
 export function toggleImageOnlyModeFromMenu() {
     isImageOnly = !isImageOnly;
-    saveImageOnlySetting(isImageOnly);
+    const result = saveImageOnlySetting(isImageOnly);
+    if (!result.ok) {
+        showFriendlyNotice(result.friendlyMessage, 'Penyimpanan Tampilan');
+    }
     updateImageOnlyState();
 }
 
@@ -122,7 +129,10 @@ export function updateImageOnlyState() {
 
 export function toggleCategoryCollapse(catKey) {
     collapsedCategories[catKey] = !collapsedCategories[catKey];
-    saveCollapsedCategories(collapsedCategories);
+    const result = saveCollapsedCategories(collapsedCategories);
+    if (!result.ok) {
+        showFriendlyNotice(result.friendlyMessage, 'Penyimpanan Kategori');
+    }
     renderCategories();
 }
 
@@ -233,16 +243,25 @@ export async function deleteCard(itemId, event) {
 
     if (Array.isArray(userCards) && userCards.some((uc) => uc.id === itemId)) {
         userCards = userCards.filter((c) => c.id !== itemId);
-        saveUserCards(userCards);
+        const cardRes = saveUserCards(userCards);
+        if (!cardRes.ok) {
+            showFriendlyNotice(cardRes.friendlyMessage, 'Penghapusan Kartu');
+        }
     } else if (!deletedCardIds.includes(itemId)) {
         deletedCardIds.push(itemId);
-        saveDeletedCardIds(deletedCardIds);
+        const delRes = saveDeletedCardIds(deletedCardIds);
+        if (!delRes.ok) {
+            showFriendlyNotice(delRes.friendlyMessage, 'Penghapusan Kartu');
+        }
     }
 
     delete customImages[itemId];
     delete customLabels[itemId];
     await removeCardImage(itemId);
-    saveCustomLabels(customLabels);
+    const labelRes = saveCustomLabels(customLabels);
+    if (!labelRes.ok) {
+        showFriendlyNotice(labelRes.friendlyMessage, 'Penghapusan Kartu');
+    }
 
     renderCategories();
 }
@@ -331,13 +350,17 @@ export async function searchArasaac() {
         });
     } catch (err) {
         console.error('Gagal mengambil gambar ARASAAC:', err);
-        resultsContainer.innerHTML = '<p style="grid-column: span 4; font-size:0.85rem; text-align:center; color:#ef4444;">Gagal terhubung ke server ARASAAC.</p>';
+        resultsContainer.innerHTML = '<p style="grid-column: span 4; font-size:0.85rem; text-align:center; color:#ef4444;">Gagal terhubung ke server ARASAAC. Periksa koneksi internet Anda.</p>';
     }
 }
 
 async function applyEditedCardImage(cardId, base64Img) {
+    const saveRes = await saveCardImage(cardId, base64Img);
+    if (!saveRes.ok) {
+        showFriendlyNotice(saveRes.friendlyMessage, 'Penyimpanan Gambar');
+        return;
+    }
     customImages[cardId] = base64Img;
-    await saveCardImage(cardId, base64Img);
     closeAddCardModal();
     renderCategories();
 }
@@ -355,6 +378,8 @@ export async function submitNewCustomCard() {
                 return;
             } catch (e) {
                 console.error('Gagal mengonversi gambar:', e);
+                showFriendlyNotice('Gagal mengambil gambar piktogram. Silakan coba lagi atau pilih gambar dari galeri.', 'Pengambilan Gambar');
+                return;
             }
         } else if (fileInput.files && fileInput.files.length > 0) {
             compressImage(fileInput.files[0], async (compressedBase64) => {
@@ -379,6 +404,8 @@ export async function submitNewCustomCard() {
             return;
         } catch (e) {
             console.error('Gagal mengonversi gambar ARASAAC:', e);
+            showFriendlyNotice('Gagal mengambil gambar piktogram. Silakan coba lagi atau unggah foto dari perangkat.', 'Pengambilan Gambar');
+            return;
         }
     }
 
@@ -402,19 +429,21 @@ async function saveCardToStorage(catKey, textVal, imageUrl) {
 
     const imgSaveResult = await saveCardImage(newCardId, imageUrl);
     if (!imgSaveResult.ok) {
-        alert('Memori penyimpanan penuh. Coba hapus beberapa kartu lama.');
+        showFriendlyNotice(imgSaveResult.friendlyMessage, 'Penyimpanan Gambar Kartu');
         return;
     }
 
     customImages[newCardId] = imageUrl;
-    userCards.push(newCardObj);
-
-    const cardSaveResult = saveUserCards(userCards);
+    const nextUserCards = [...userCards, newCardObj];
+    const cardSaveResult = saveUserCards(nextUserCards);
     if (!cardSaveResult.ok) {
-        alert('Memori penyimpanan penuh. Coba hapus beberapa kartu lama.');
+        await removeCardImage(newCardId);
+        delete customImages[newCardId];
+        showFriendlyNotice(cardSaveResult.friendlyMessage, 'Penyimpanan Kartu');
         return;
     }
 
+    userCards = nextUserCards;
     closeAddCardModal();
     renderCategories();
     alert('Kartu PECS baru berhasil ditambahkan!');
@@ -425,7 +454,10 @@ export function editCardText(itemId, currentText, event) {
     const newText = prompt('Masukkan tulisan/nama baru untuk kartu ini:', currentText);
     if (newText !== null && newText.trim() !== '') {
         customLabels[itemId] = newText.trim();
-        saveCustomLabels(customLabels);
+        const labelRes = saveCustomLabels(customLabels);
+        if (!labelRes.ok) {
+            showFriendlyNotice(labelRes.friendlyMessage, 'Penyimpanan Tulisan');
+        }
         renderCategories();
     }
 }
@@ -435,6 +467,9 @@ export async function resetCardCustomization(itemId, event) {
     delete customImages[itemId];
     delete customLabels[itemId];
     await removeCardImage(itemId);
-    saveCustomLabels(customLabels);
+    const labelRes = saveCustomLabels(customLabels);
+    if (!labelRes.ok) {
+        showFriendlyNotice(labelRes.friendlyMessage, 'Reset Kartu');
+    }
     renderCategories();
 }
