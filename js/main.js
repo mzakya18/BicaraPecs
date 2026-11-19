@@ -1,9 +1,17 @@
-/* Fungsi: Pintu masuk utama aplikasi Bicara PECS yang menjalankan migrasi dan menghubungkan modul.
-   Batasan: Tidak menyimpan logika fitur detail; hanya menghubungkan modul dan mendaftarkan event. */
+/* Fungsi: Pintu masuk utama aplikasi Bicara PECS dengan penanganan error global dan pemulihan cadangan.
+   Batasan: Tidak menyimpan logika fitur detail; hanya menghubungkan modul dan inisialisasi. */
 
 import { STORAGE_KEYS } from './config.js';
 import { getRawStorage, setRawStorage, clearAllStorage } from './storage/localStore.js';
-import { migrateLegacyImagesToIdb, clearAllCardImages } from './storage/storageService.js';
+import {
+    migrateLegacyImagesToIdb,
+    clearAllCardImages,
+    restoreValidatedBackupData
+} from './storage/storageService.js';
+import {
+    installGlobalErrorHandlers,
+    showFriendlyNotice
+} from './shared/errorHandler.js';
 import {
     bindActivityLockListeners,
     evaluateAppLock,
@@ -124,6 +132,32 @@ export async function resetToDefaultSettings() {
     }
 }
 
+export async function restoreBackupJsonText(jsonText) {
+    let parsedObj = null;
+    try {
+        parsedObj = JSON.parse(jsonText);
+    } catch (e) {
+        showFriendlyNotice(
+            'Berkas cadangan tidak dapat dibaca karena format JSON rusak. Data Anda yang lama tetap aman.',
+            'Pemulihan Cadangan Gagal'
+        );
+        return { ok: false };
+    }
+
+    const result = await restoreValidatedBackupData(parsedObj);
+    if (!result.ok) {
+        showFriendlyNotice(result.message, 'Pemulihan Cadangan Gagal');
+        return { ok: false };
+    }
+
+    initTheme();
+    updateChildLockUI(() => toggleEditMode(false));
+    await refreshCardsStorageState();
+    renderHistory();
+    alert(result.message);
+    return { ok: true };
+}
+
 function wireModuleConnections() {
     setCardSelectHandler((word, emoji, customImgUrl) => {
         addToSentence(word, emoji, customImgUrl);
@@ -139,6 +173,7 @@ function wireModuleConnections() {
     window.closeMenu = closeMenu;
     window.saveSettingsAndStart = saveSettingsAndStart;
     window.resetToDefaultSettings = resetToDefaultSettings;
+    window.restoreBackupJsonText = restoreBackupJsonText;
 
     window.checkUnlockPassword = checkUnlockPassword;
     window.openPinConfigModal = openPinConfigModal;
@@ -182,6 +217,7 @@ async function initializeApp() {
     goToPage(lastActivePage);
 }
 
+installGlobalErrorHandlers();
 registerServiceWorker();
 bindActivityLockListeners();
 bindScrollTopButton();
