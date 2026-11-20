@@ -1,7 +1,7 @@
-/* Fungsi: Mengatur cache berkas PWA Bicara PECS untuk akses offline dengan versi terpusat.
-   Batasan: Hanya mengelola penyimpanan cache berkas aplikasi, bukan data pengguna. */
+/* Fungsi: Mengatur cache berkas PWA Bicara PECS dengan strategi Network-First agar pembaruan kode langsung aktif.
+   Batasan: Hanya mengelola cache berkas statis aplikasi, tidak menyentuh data pengguna di localStorage/IndexedDB. */
 
-const CACHE_VERSION = 'v20';
+const CACHE_VERSION = 'v1.5';
 const CACHE_NAME = `bicara-pecs-${CACHE_VERSION}`;
 
 const CORE_ASSETS = [
@@ -36,7 +36,9 @@ const CORE_ASSETS = [
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(CORE_ASSETS);
+            return Promise.allSettled(
+                CORE_ASSETS.map((assetUrl) => cache.add(assetUrl))
+            );
         }).then(() => self.skipWaiting())
     );
 });
@@ -56,23 +58,24 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     if (event.request.method !== 'GET') return;
 
+    const isSameOrigin = event.request.url.startsWith(self.location.origin);
+    if (!isSameOrigin) return;
+
     event.respondWith(
-        caches.match(event.request).then((cachedResponse) => {
-            if (cachedResponse) {
-                return cachedResponse;
-            }
-            return fetch(event.request).then((networkResponse) => {
-                const isSameOrigin = event.request.url.startsWith(self.location.origin);
-                if (isSameOrigin && networkResponse && networkResponse.status === 200) {
+        fetch(event.request)
+            .then((networkResponse) => {
+                if (networkResponse && networkResponse.status === 200) {
                     const responseClone = networkResponse.clone();
                     caches.open(CACHE_NAME).then((cache) => {
                         cache.put(event.request, responseClone);
                     });
                 }
                 return networkResponse;
-            }).catch(() => {
-                return caches.match('./index.html');
-            });
-        })
+            })
+            .catch(() => {
+                return caches.match(event.request).then((cachedResponse) => {
+                    return cachedResponse || caches.match('./index.html');
+                });
+            })
     );
 });
