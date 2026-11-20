@@ -1,5 +1,5 @@
 /* Fungsi: Pintu masuk utama aplikasi Bicara PECS yang mengamankan navigasi halaman
-   meskipun sebagian modul fitur sedang dimuat atau diperbarui.
+   serta memberikan pemberitahuan jelas bila ada berkas modul yang gagal dimuat.
    Batasan: Tidak menyimpan logika detail fitur; hanya mengatur alur utama dan inisialisasi. */
 
 const DEFAULT_FALLBACK_PASS = 'bicarapecsby@zakymza18';
@@ -83,6 +83,7 @@ async function fallbackCheckUnlockPassword() {
 window.goToPage = fallbackGoToPage;
 window.saveSettingsAndStart = fallbackSaveSettingsAndStart;
 window.checkUnlockPassword = fallbackCheckUnlockPassword;
+window.scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
 async function bootstrapModules() {
     try {
@@ -261,7 +262,14 @@ async function bootstrapModules() {
         const lastActivePage = getRawStorage(STORAGE_KEYS.ACTIVE_PAGE) || 'page-welcome';
         goToPage(lastActivePage);
     } catch (err) {
-        console.error('Sebagian modul belum termuat:', err);
+        console.error('Detail modul yang gagal dimuat:', err);
+        const detail = err && err.message ? err.message : 'Berkas modul tidak ditemukan.';
+        const notice = document.createElement('div');
+        notice.style.cssText = 'position:fixed;bottom:16px;left:16px;right:16px;background:#fee2e2;color:#991b1b;border:1px solid #ef4444;border-radius:10px;padding:12px;font-size:0.85rem;z-index:99999;';
+        notice.innerText = 'Kendala memuat modul aplikasi: ' + detail;
+        if (document.body) {
+            document.body.appendChild(notice);
+        }
     }
 }
 
