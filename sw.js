@@ -1,7 +1,7 @@
 /* Fungsi: Mengatur cache berkas PWA Bicara PECS untuk akses offline dengan versi terpusat.
    Batasan: Hanya mengelola penyimpanan cache berkas aplikasi, bukan data pengguna. */
 
-const CACHE_VERSION = 'v19';
+const CACHE_VERSION = 'v20';
 const CACHE_NAME = `bicara-pecs-${CACHE_VERSION}`;
 
 const CORE_ASSETS = [
