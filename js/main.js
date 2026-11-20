@@ -1,5 +1,5 @@
-/* Fungsi: Pintu masuk utama aplikasi Bicara PECS yang mengamankan navigasi halaman
-   serta memberikan pemberitahuan jelas bila ada berkas modul yang gagal dimuat.
+/* Fungsi: Pintu masuk utama aplikasi Bicara PECS yang menjaga tombol tetap responsif
+   serta menampilkan diagnosa jelas di area kartu bila ada berkas modul yang gagal dimuat.
    Batasan: Tidak menyimpan logika detail fitur; hanya mengatur alur utama dan inisialisasi. */
 
 const DEFAULT_FALLBACK_PASS = 'bicarapecsby@zakymza18';
@@ -20,6 +20,20 @@ function fallbackGoToPage(pageId) {
         } catch (e) {}
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+}
+
+function fallbackOpenMenu() {
+    const overlay = document.getElementById('overlay');
+    const sidebar = document.getElementById('sidebar');
+    if (overlay) overlay.style.display = 'block';
+    if (sidebar) sidebar.classList.add('open');
+}
+
+function fallbackCloseMenu() {
+    const overlay = document.getElementById('overlay');
+    const sidebar = document.getElementById('sidebar');
+    if (overlay) overlay.style.display = 'none';
+    if (sidebar) sidebar.classList.remove('open');
 }
 
 function fallbackSaveSettingsAndStart() {
@@ -81,6 +95,8 @@ async function fallbackCheckUnlockPassword() {
 }
 
 window.goToPage = fallbackGoToPage;
+window.openMenu = fallbackOpenMenu;
+window.closeMenu = fallbackCloseMenu;
 window.saveSettingsAndStart = fallbackSaveSettingsAndStart;
 window.checkUnlockPassword = fallbackCheckUnlockPassword;
 window.scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -141,20 +157,6 @@ async function bootstrapModules() {
                 setRawStorage(STORAGE_KEYS.ACTIVE_PAGE, pageId);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
-        }
-
-        function openMenu() {
-            const overlay = document.getElementById('overlay');
-            const sidebar = document.getElementById('sidebar');
-            if (overlay) overlay.style.display = 'block';
-            if (sidebar) sidebar.classList.add('open');
-        }
-
-        function closeMenu() {
-            const overlay = document.getElementById('overlay');
-            const sidebar = document.getElementById('sidebar');
-            if (overlay) overlay.style.display = 'none';
-            if (sidebar) sidebar.classList.remove('open');
         }
 
         function saveSettingsAndStart() {
@@ -229,8 +231,8 @@ async function bootstrapModules() {
 
         window.scrollToTop = scrollToTop;
         window.goToPage = goToPage;
-        window.openMenu = openMenu;
-        window.closeMenu = closeMenu;
+        window.openMenu = fallbackOpenMenu;
+        window.closeMenu = fallbackCloseMenu;
         window.saveSettingsAndStart = saveSettingsAndStart;
         window.resetToDefaultSettings = resetToDefaultSettings;
         window.restoreBackupJsonText = restoreBackupJsonText;
@@ -264,11 +266,15 @@ async function bootstrapModules() {
     } catch (err) {
         console.error('Detail modul yang gagal dimuat:', err);
         const detail = err && err.message ? err.message : 'Berkas modul tidak ditemukan.';
-        const notice = document.createElement('div');
-        notice.style.cssText = 'position:fixed;bottom:16px;left:16px;right:16px;background:#fee2e2;color:#991b1b;border:1px solid #ef4444;border-radius:10px;padding:12px;font-size:0.85rem;z-index:99999;';
-        notice.innerText = 'Kendala memuat modul aplikasi: ' + detail;
-        if (document.body) {
-            document.body.appendChild(notice);
+        const container = document.getElementById('categories-container');
+        if (container) {
+            container.innerHTML = `
+                <div style="background:#fee2e2; color:#991b1b; border:1px solid #ef4444; border-radius:12px; padding:14px; margin-top:12px; font-size:0.9rem; line-height:1.5;">
+                    <strong>⚠️ Modul Kartu Belum Termuat</strong><br>
+                    Detail kendala: <code>${detail}</code><br><br>
+                    Pastikan berkas <code>js/storage/localStore.js</code> sudah ada di folder <code>js/storage/</code> (menggantikan <code>localStorage.js</code>), lalu muat ulang halaman.
+                </div>
+            `;
         }
     }
 }
